@@ -97,7 +97,6 @@ def ffmpeg_clip(t1, t2, ID, pathout, ar=44100):
 
     return rtrn
 
-
 def get_splits():
     '''
     Returns 
@@ -120,16 +119,31 @@ def get_splits():
     
     return train, test, val
 
+def get_random_clip(duration):
+    '''
+    Get a random clip with 0 <= t1 and t2 <= duration.
+    '''
+    t  = np.random.uniform(1, duration-1)
+    t1 = t - 1
+    t2 = t + 1
+    return (t1, t2)
+
+def overlapping(timestamps1, timestamps2):    
+    t_x = np.mean(timestamps1)
+    t_y = np.mean(timestamps2)
+    return np.abs(t_x - t_y) < 2 #since clips are 2 seconds long.
+
 def append_negative_cases(dataframe_class1, method='random', ratio=1):
     '''
     Takes a dataframe with columns [ID, t1, t2] with positive cases and appends negative cases.
     '''
-    
     if method == 'random':
         assert type(ratio) is int, 'ratio should be an integer.'
         
         n_class1 = dataframe_class1.groupby('ID').size().reset_index(name='n')
         n_class0 = n_class1
+
+        ratio = 1
 
         n_class0['n'] = np.round(n_class0['n'] * ratio)
         n_class0['IDduration'] = [get_duration(x) for x in n_class0['ID']]
@@ -138,13 +152,11 @@ def append_negative_cases(dataframe_class1, method='random', ratio=1):
 
         for _, (ID, n, duration) in n_class0.iterrows():
             n_exported = 0
+            subset = dataframe_class1.loc[dataframe_class1['ID'] == 'ID']
             while n_exported < n:
-                t  = np.random.uniform(1, duration-1)
-                t1 = t - 1
-                t2 = t + 1
-                no_overlap = np.all((t1 <= dataframe_class1.loc[dataframe_class1['ID'] == ID]['t1'].to_numpy()) ==  (t2 <= dataframe_class1.loc[dataframe_class1['ID'] == ID]['t1'].to_numpy()))
-                if no_overlap:
-                    dataframe_class0 = dataframe_class0.append(pd.DataFrame({'ID' : ID, 't1' : t1, 't2' : t2}, index=[0]), ignore_index=True)
+                timestamp = get_random_clip(duration)
+                if not subset[['t1', 't2']].apply(lambda x : overlapping(timestamp, x), axis=1).any():
+                    dataframe_class0 = dataframe_class0.append(pd.DataFrame({'ID' : ID, 't1' : timestamp[0], 't2' : timestamp[1]}, index=[0]), ignore_index=True)
                     n_exported += 1
 
         assert n_class0[['ID', 'n']].equals(dataframe_class0.groupby('ID').size().reset_index(name='n')), 'Wrong number of clips exported.'
@@ -152,7 +164,6 @@ def append_negative_cases(dataframe_class1, method='random', ratio=1):
         dataframe_class0['class'] = 0
         dataframe_class1['class'] = 1
         dataframe = pd.concat([dataframe_class1, dataframe_class0])
-        
     else:
         raise NotImplementedError(f'Method {method} is not implemented yet.')
         
