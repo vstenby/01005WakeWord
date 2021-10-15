@@ -3,6 +3,22 @@ import pandas as pd
 import subprocess
 import os 
 
+# --- Functions related to clipping and video.dtu.dk ---
+def seconds_to_timestamp(seconds):
+    '''
+    Convert the seconds to HH:MM:SS:SSS timestamp.
+    '''
+    sss = np.round(seconds - np.floor(seconds),2)
+
+    m, s = divmod(np.floor(seconds), 60)
+    h, m = divmod(m, 60)
+
+    sss = str(sss).split('.')[-1].ljust(2,'0')
+
+    h = str(int(h)).zfill(2); m = str(int(m)).zfill(2); s = str(int(s)).zfill(2);
+
+    return ':'.join([h,m,s]) + '.' + sss
+
 def timestamp_to_seconds(ts):
     '''
     Converts a timestamp to seconds.
@@ -22,21 +38,6 @@ def timestamp_to_seconds(ts):
     assert 0 <= seconds, f"Something went wrong with loading the timestamp. {ts}"
     
     return seconds
-
-def seconds_to_timestamp(seconds):
-    '''
-    Convert the seconds to HH:MM:SS:SSS timestamp.
-    '''
-    sss = np.round(seconds - np.floor(seconds),2)
-
-    m, s = divmod(np.floor(seconds), 60)
-    h, m = divmod(m, 60)
-
-    sss = str(sss).split('.')[-1].ljust(2,'0')
-
-    h = str(int(h)).zfill(2); m = str(int(m)).zfill(2); s = str(int(s)).zfill(2);
-
-    return ':'.join([h,m,s]) + '.' + sss
     
 def stream_link(ID):
     '''
@@ -68,34 +69,31 @@ def fetch_ID(url):
     '''
     return '0_' + url.split('0_')[-1].split('/')[0]
 
-def ffmpeg_clip(t1, t2, ID, pathout, ar=44100):
+def clip(t1, t2, ID, pathout, ar=44100):
     '''
-    Export a clip.
-    Input:
-        t1:  start time (seconds)
-        t2:  end time (seconds)
-        url: video.dtu.dk link
+    Clip from a lecture.
     '''
-    assert 0 <= t1, f'Invalid value of t1: {t1}'
-    assert pathout.endswith('.wav'), 'only supports .wav files'
-    
-    #Replace letters causing trouble.
-    pathout = pathout.replace(' ','_')\
-                     .replace(',','')\
-                     .replace("'","") 
-    
     t1_timestamp = seconds_to_timestamp(t1) 
     t2_timestamp = seconds_to_timestamp(t2) 
-    duration = seconds_to_timestamp(t2-t1) 
-    
-    #Get the stream url from the ID.
-    url = stream_link(ID)
-    
-    bashcmd = f'ffmpeg -ss {t1_timestamp} -i "{url}" -t {duration} -ar {ar} -map a {pathout} -loglevel error'    
-    
-    rtrn = subprocess.call(bashcmd, shell=True)
+    duration     = seconds_to_timestamp(t2-t1) 
+    url          = stream_link(ID)
+    bashcmd = f'ffmpeg -ss {t1_timestamp} -i "{url}" -t {duration} -q:a 0 -map a {pathout} -loglevel error'
+    rtrn = subprocess.call(bashcmd, shell=True)    
+    assert rtrn == 0, 'clip failed.'  
+    return 
 
-    return rtrn
+def download(ID, pathout):
+    '''
+    Download a full lecture.
+    '''
+    url = stream_link(ID)
+    bashcmd = f'ffmpeg -i "{url}" -q:a 0 -map a {pathout} -loglevel error'
+    rtrn = subprocess.call(bashcmd, shell=True)
+    assert rtrn == 0, 'download failed.'
+    return 
+
+
+# --- End of functions related to video.dtu.dk ---
 
 def get_splits():
     '''
@@ -113,11 +111,69 @@ def get_splits():
 
     counts['percentage'] = counts['n'].cumsum() / counts['n'].sum()
     
-    train = (counts['ID'].loc[counts['percentage'] <= 0.7]).tolist()
-    test  = (counts['ID'].loc[(counts['percentage'] > 0.7)&(counts['percentage']<= 0.85)]).tolist()
-    val   = (counts['ID'].loc[counts['percentage'] > 0.85]).tolist()
+    train_ID = (counts['ID'].loc[counts['percentage'] <= 0.7]).tolist()
+    val_ID   = (counts['ID'].loc[(counts['percentage'] > 0.7)&(counts['percentage']<= 0.85)]).tolist()
+    test_ID  = (counts['ID'].loc[counts['percentage'] > 0.85]).tolist()
     
-    return train, test, val
+    train = data.loc[data['ID'].isin(train_ID)].sort_values(by=['ID', 't1'])
+    val   = data.loc[data['ID'].isin(val_ID)].sort_values(by=['ID', 't1'])
+    test  = data.loc[data['ID'].isin(test_ID)].sort_values(by=['ID', 't1'])
+    
+    return train, val, test
+
+def get_mask(ID, t, n, label = False):
+    '''
+    Gets a mask where the keywords are. This is similar to get_targets.
+    '''
+    
+    assert len(t.shape) == 2, 't should have [n x 2] shape.'
+    assert t.shape[-1]  == 2, 't should have [n x 2] shape.'
+    
+    #First, we want to get the duration.
+    duration   = get_duration(ID)
+    
+    t_linspace = np.linspace(0, duration, n)
+    targets    = np.zeros_like(t_linspace)
+    
+    t1s = t[:,0]
+    t2s = t[:,1]
+    
+    mask_value = 1
+    for t1, t2 in zip(t1s, t2s):
+        targets[(t1 <= t_linspace)&(t_linspace <= t2)] = mask_value
+        if label: mask_value += 1
+        
+    return t_linspace, targets
+
+def get_targets(ID, t, n, delay = 0, target_duration = 1):
+    '''
+    Returns the targets of a lecture. 
+    
+    Inputs:
+        ID              : ID to the lecture
+        t               : array of size n x 2, where t[:,0] is t1 (start of wakeword) and t[:,1] is t2 (end of wakeword)
+        n               : desired output length
+        delay           : delay from t2 until target in seconds.
+        target_duration : how long target should be 1 after t2+delay.
+    '''
+    
+    assert len(t.shape) == 2, 't should have [n x 2] shape.'
+    assert t.shape[-1]  == 2, 't should have [n x 2] shape.'
+    
+    #First, we want to get the duration.
+    duration   = get_duration(ID)
+    
+    t_linspace = np.linspace(0, duration, n)
+    targets    = np.zeros_like(t_linspace)
+    
+    #Fetch end of keyword utterances and add delay.
+    t2s = t[:,1] + delay
+    
+    for t2 in t2s:
+        timediffs = t_linspace - t2
+        targets[(timediffs > 0)&(timediffs <= target_duration)] = 1
+    
+    return t_linspace, targets
 
 def get_random_clip(duration):
     '''
@@ -127,12 +183,12 @@ def get_random_clip(duration):
     t1 = t - 1
     t2 = t + 1
     return (t1, t2)
-
+ 
 def overlapping(timestamps1, timestamps2):    
     t_x = np.mean(timestamps1)
     t_y = np.mean(timestamps2)
     return np.abs(t_x - t_y) < 2 #since clips are 2 seconds long.
-
+ 
 def append_negative_cases(dataframe_class1, method='random', ratio=1):
     '''
     Takes a dataframe with columns [ID, t1, t2] with positive cases and appends negative cases.
