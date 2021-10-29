@@ -1,6 +1,11 @@
 # Repo specifics
 export/
 
+#We dont want all those wav and mp3 files.
+*.wav
+*.mp3
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
