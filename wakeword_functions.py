@@ -3,123 +3,13 @@ import pandas as pd
 import subprocess
 import os 
 
-# --- Functions related to clipping and video.dtu.dk ---
-def seconds_to_timestamp(seconds):
-    '''
-    Convert the seconds to HH:MM:SS:SSS timestamp.
-    '''
-    sss = np.round(seconds - np.floor(seconds),2)
+import torch
+import torchaudio
+import torchaudio.transforms as T
+import augment
+import multiprocessing
 
-    m, s = divmod(np.floor(seconds), 60)
-    h, m = divmod(m, 60)
-
-    sss = str(sss).split('.')[-1].ljust(2,'0')
-
-    h = str(int(h)).zfill(2); m = str(int(m)).zfill(2); s = str(int(s)).zfill(2);
-
-    return ':'.join([h,m,s]) + '.' + sss
-
-def timestamp_to_seconds(ts):
-    '''
-    Converts a timestamp to seconds.
-    '''
-    assert ts.count(':') <= 2, f"Too many :'s in the timestamp: {ts}"
-    assert ts.count('.') <= 1, f"Too many .'s in the timestamp: {ts}"
-    sss_ = 0
-    
-    if ts.count('.') == 1:
-        ts, sss = ts.split('.')
-        sss_ = 0
-        for i, n in enumerate(sss):
-            sss_ += 1/(10**(i+1)) * float(n)
-            
-    seconds = float(sum(int(x) * (60**i) for i, x in enumerate(reversed(ts.split(':'))))) + sss_
-    
-    assert 0 <= seconds, f"Something went wrong with loading the timestamp. {ts}"
-    
-    return seconds
-    
-def stream_link(ID):
-    '''
-    Fetches a stream link from ID. 
-    '''
-    return f'https://dchsou11xk84p.cloudfront.net/p/201/sp/20100/playManifest/entryId/{ID}/format/url/protocol/https'
-    
-def download_link(ID):
-    '''
-    Returns a download link from ID.
-    '''
-    return f'https://dchsou11xk84p.cloudfront.net/p/201/sp/20100/playManifest/entryId/{ID}/format/download/protocol/https/flavorParamIds/0'
-
-def get_duration(ID):
-    '''
-    Returns the duration of a video.
-    '''
-    import cv2 as cv
-    
-    #Read the video capture from cv2.
-    cap = cv.VideoCapture(stream_link(ID))
-    return int(cap.get(cv.CAP_PROP_FRAME_COUNT))/cap.get(cv.CAP_PROP_FPS)
-
-def fetch_ID(url):
-    '''
-    Takes a video.dtu.dk link and returns the video ID.
-    
-    TODO: This should make some assertions about the url.
-    '''
-    return '0_' + url.split('0_')[-1].split('/')[0]
-
-def clip(t1, t2, ID, pathout, ar=44100):
-    '''
-    Clip from a lecture.
-    '''
-    t1_timestamp = seconds_to_timestamp(t1) 
-    t2_timestamp = seconds_to_timestamp(t2) 
-    duration     = seconds_to_timestamp(t2-t1) 
-    url          = stream_link(ID)
-    bashcmd = f'ffmpeg -ss {t1_timestamp} -i "{url}" -t {duration} -q:a 0 -map a {pathout} -loglevel error'
-    rtrn = subprocess.call(bashcmd, shell=True)    
-    assert rtrn == 0, 'clip failed.'  
-    return 
-
-def download(ID, pathout):
-    '''
-    Download a full lecture.
-    '''
-    url = stream_link(ID)
-    bashcmd = f'ffmpeg -i "{url}" -q:a 0 -map a {pathout} -loglevel error'
-    rtrn = subprocess.call(bashcmd, shell=True)
-    assert rtrn == 0, 'download failed.'
-    return 
-
-
-# --- End of functions related to video.dtu.dk ---
-
-def get_splits():
-    '''
-    Returns 
-        train, test, val splits
-    '''
-    
-    links = pd.read_csv('./csv/links.csv')
-    data  = pd.read_csv('./csv/data.csv')
-
-    counts = pd.merge(links[['semester', 'title', 'ID']],
-                  data.groupby(['semester', 'ID']).size().reset_index(name='n'),
-                  how='inner',
-                  on=['semester', 'ID'])
-
-    counts['percentage'] = counts['n'].cumsum() / counts['n'].sum()
-    
-    train_ID = (counts['ID'].loc[counts['percentage'] <= 0.7]).tolist()
-    val_ID   = (counts['ID'].loc[(counts['percentage'] > 0.7)&(counts['percentage']<= 0.85)]).tolist()
-    test_ID  = (counts['ID'].loc[counts['percentage'] > 0.85]).tolist()
-    
-    train = data.loc[data['ID'].isin(train_ID)].sort_values(by=['ID', 't1'])
-    val   = data.loc[data['ID'].isin(val_ID)].sort_values(by=['ID', 't1'])
-    test  = data.loc[data['ID'].isin(test_ID)].sort_values(by=['ID', 't1'])
-    
-    return train, val, test
+import tqdm.auto as tqdm
 
 def get_mask(ID, t, n, label = False):
     '''
@@ -175,52 +65,102 @@ def get_targets(ID, t, n, delay = 0, target_duration = 1):
     
     return t_linspace, targets
 
-def get_random_clip(duration):
+# --- Data related functions ---
+
+def load_data(path, f, sr = 22000, normalize = True, transforms = None):
     '''
-    Get a random clip with 0 <= t1 and t2 <= duration.
+    Load in audio, sample-rate and x (either MFCC or spectrogram).
     '''
-    t  = np.random.uniform(1, duration-1)
-    t1 = t - 1
-    t2 = t + 1
-    return (t1, t2)
- 
-def overlapping(timestamps1, timestamps2):    
-    t_x = np.mean(timestamps1)
-    t_y = np.mean(timestamps2)
-    return np.abs(t_x - t_y) < 2 #since clips are 2 seconds long.
- 
-def append_negative_cases(dataframe_class1, method='random', ratio=1):
-    '''
-    Takes a dataframe with columns [ID, t1, t2] with positive cases and appends negative cases.
-    '''
-    if method == 'random':
-        assert type(ratio) is int, 'ratio should be an integer.'
+    
+    audio, sr0 = torchaudio.load(path, normalize = normalize)
+    
+    if normalize:
+        audio, sr0 = torchaudio.sox_effects.apply_effects_tensor(audio, sr0, [['gain', '-n']], channels_first=True)
+    
+    #Resample to the desired sample rate.
+    audio = T.Resample(sr0, sr)(audio)
+    
+    if transforms:
+        if type(transforms) is not list:
+            transforms = [transforms]
         
-        n_class1 = dataframe_class1.groupby('ID').size().reset_index(name='n')
-        n_class0 = n_class1
+        for t in transforms:
+            audio, sr = t(audio, sr)
+            
+    x = f(audio)
+    return audio, sr, x
 
-        ratio = 1
+# --- Transformers ---
 
-        n_class0['n'] = np.round(n_class0['n'] * ratio)
-        n_class0['IDduration'] = [get_duration(x) for x in n_class0['ID']]
+#Pads the audio to a certain length.
+class Padder:
+  '''
+  Pads to a desired length.
+  '''
+  def __init__(self, outlen):
+    self.outlen = outlen
+    return
+  
+  def __call__(self, x, y = None):
+    #x is audio, y is sample rate
+    if x.shape[-1] > self.outlen:
+      x = x[:, :self.outlen]
+    assert x.shape[-1] <= self.outlen, f'outlen should be larger than the length of x. outlen: {self.outlen}, x.shape: {x.shape}'
+    x = torch.nn.ConstantPad1d((0, self.outlen - x.shape[-1]), 0)(x)
 
-        dataframe_class0 = pd.DataFrame(columns = dataframe_class1.columns)
+    assert x.shape[-1] == self.outlen, f'Something went wrong.'
+    return x, y
 
-        for _, (ID, n, duration) in n_class0.iterrows():
-            n_exported = 0
-            subset = dataframe_class1.loc[dataframe_class1['ID'] == 'ID']
-            while n_exported < n:
-                timestamp = get_random_clip(duration)
-                if not subset[['t1', 't2']].apply(lambda x : overlapping(timestamp, x), axis=1).any():
-                    dataframe_class0 = dataframe_class0.append(pd.DataFrame({'ID' : ID, 't1' : timestamp[0], 't2' : timestamp[1]}, index=[0]), ignore_index=True)
-                    n_exported += 1
 
-        assert n_class0[['ID', 'n']].equals(dataframe_class0.groupby('ID').size().reset_index(name='n')), 'Wrong number of clips exported.'
-        
-        dataframe_class0['class'] = 0
-        dataframe_class1['class'] = 1
-        dataframe = pd.concat([dataframe_class1, dataframe_class0])
-    else:
-        raise NotImplementedError(f'Method {method} is not implemented yet.')
-        
-    return dataframe
+class TransformMono:
+    '''
+    Transforms a clip to mono.
+    '''
+    def __call__(self, x, y=None):
+        x = torch.mean(x, dim=0).unsqueeze(0)
+        return x, y
+    
+    
+class AudioAugment:
+  '''
+  AudioAugmentor
+  '''
+  def __init__(self, reverb, snr, pitch, p):
+    #Set the parameters
+    self.reverb = reverb
+    self.snr    = snr
+    self.pitch  = pitch
+    self.p      = p
+
+  def __call__(self, x, sr):
+    #Draw reverb, snr and pitch.
+
+    flips = np.random.binomial(1, p=self.p, size=3)
+
+    if flips[0]:
+      #Add reverb
+      reverb = np.random.randint(0, self.reverb)
+      x = augment.EffectChain().reverb(reverb, reverb, reverb).channels(2).apply(x, src_info={'rate': sr})
+
+    if flips[1]:
+      #Add noise
+      noise_generator = lambda: torch.zeros_like(x).uniform_()
+      x = augment.EffectChain().additive_noise(noise_generator, snr=self.snr).apply(x, src_info={'rate': sr})
+
+    if flips[2]:
+      #Add pitch - PITCH CAN SOMEHOW CHANGE THE SHAPE. NOT SURE HOW, WHY ETC.
+      pitch = np.random.randint(-self.pitch, self.pitch)
+      x = augment.EffectChain().pitch(pitch).rate(sr).apply(x, src_info = {'rate' : sr})
+      
+    return x, sr
+
+class SoxTransform:
+  '''
+  A wrapper for torchaudio.sox_effects.apply_effects_tensor.
+  '''
+  def __init__(self, effects):
+    self.effects = effects
+
+  def __call__(self, x, y):
+    x, y = torchaudio.sox_effects.apply_effects_tensor(x, y, self.effects, channels_first=True)
+    return x, y
