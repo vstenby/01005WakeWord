@@ -27,7 +27,7 @@ def parser():
     parser.add_argument('--load-empty', default=False, action='store_true', help='if --load-empty is passed, then csvs located in the "empty" csv folder are also loaded.')
     parser.add_argument('--include-placeholder', default=False, action='store_true', help='if --include-placeholder is passed, then placeholders are included.')
     parser.add_argument('--threads', default=4, type=int, help='Amount of threads used to download clips, default 4')
-    parser.add_argument('--ar', default=44100, type=int, help='Sample rate of audio clips')
+    parser.add_argument('--ar', default=22050, type=int, help='Sample rate of audio clips')
     
     
     #Should be grouped together as well.

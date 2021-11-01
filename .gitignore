@@ -1,5 +1,6 @@
 # Repo specifics
 export/
+.DS_Store
 
 #We dont want all those wav and mp3 files.
 *.wav

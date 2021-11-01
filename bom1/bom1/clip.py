@@ -28,7 +28,7 @@ def ffmpeg_clip(t1, duration, url, outpath, args):
         bashcmd = f'ffmpeg -y -ss {t1} -i "{url}" -t {duration} {outpath} -ar {args.ar} -loglevel error'
     else:
         raise ValueError('Wrong output format.')
-            
+
     rtrn = subprocess.call(bashcmd, shell=True)
     
     assert rtrn == 0, 'Download failed.'

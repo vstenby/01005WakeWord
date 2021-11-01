@@ -4,7 +4,7 @@ import tqdm as tqdm
 from .lecture_durations import lecture_durations
 from .get_splits import get_splits
 
-def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test']):
+def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test'], cliplength=2):
     '''
     Get balanced splits. 
     Balance can either be 
@@ -13,8 +13,11 @@ def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test']):
            "all" meaning that we take all negative classes. This is a lot of negatives.
     
     They are excluded based on the fact that they are not allowed to overlap. 
+    
+    Cliplength is the length of the clip in seconds.
     '''
-       
+    halfclip = cliplength/2
+    
     #Fetch the durations.
     durations = lecture_durations()
 
@@ -34,7 +37,7 @@ def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test']):
         ratio = None
 
     #Get train, val and test split to overwrite with negative classes.
-    train, val, test = get_splits()
+    train, val, test = get_splits(cliplength=cliplength)
     
     modified_sets = []
     
@@ -57,14 +60,15 @@ def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test']):
         for ID in tqdm.tqdm(split['ID'].unique(), desc=f'Generating negative classes for {splitname}'):
 
             #Fetch all t.
-            t_linspace  = np.arange(1, durations[ID] - 1, 0.01) #This is the finest grid possible with our download.
-
+            t_linspace  = np.arange(halfclip, durations[ID] - halfclip, 0.01) #This is the finest grid possible with our download.
+            
+                                
             #Fetch the t from wakewords.
             t_wakewords = split[['t1', 't2']].loc[split['ID'] == ID].mean(axis=1).tolist()
 
             for t in t_wakewords:
                 #Remove linspace with overlap. Here, we remove ones with -any- overlap at all.
-                t_linspace = t_linspace[1 <= np.abs((t_linspace - t))]
+                t_linspace = t_linspace[halfclip <= np.abs((t_linspace - t))] #
 
             if ratio is not None:
                 n_class0 = np.round(ratio * counts[ID])
@@ -78,8 +82,8 @@ def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test']):
                 #Then we just take all of them.
                 t_selected = t_linspace[np.argsort(t_linspace)]
 
-            t1 = t_selected - 1
-            t2 = t_selected + 1
+            t1 = t_selected - halfclip 
+            t2 = t_selected + halfclip
 
             #Fill out the dataframe.
             class0_ID = pd.DataFrame(columns = ['ID', 't1', 't2'])
