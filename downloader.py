@@ -23,7 +23,7 @@ def main():
     parser.add_argument('--balance', default='1:1', type=str, help='define the balance')
     parser.add_argument('--threads', default=19, type=int, help='how many threads we should download on')
     parser.add_argument('--normalize', default=False, action='store_true', help='whether or not downloaded clips should be normalized.')
-    parser.add_argument('--cliplength', default=2.0, help='length of the clips')
+    parser.add_argument('--cliplength', default=2.0, type=float, help='length of the clips')
     parser.add_argument('--data-folder', default='/work3/s164419/01005WakeWordData', help='point to data folder')
     #Add more arguments.
     
@@ -41,7 +41,7 @@ def main():
         
     assert np.all(np.array([x in ['train', 'test', 'val'] for x in splits])), 'Invalid usage of --splits'
 
-    train, val, test = wf.get_balanced_splits(balance=args.balance, seed=args.seed, splits = splits)
+    train, val, test = wf.get_balanced_splits(balance=args.balance, seed=args.seed, splits = splits, cliplength=args.cliplength)
     
     for split in splits:
         if split == 'test':
