@@ -1,6 +1,7 @@
 from tqdm.notebook import trange, tqdm
 from sklearn.metrics import accuracy_score
 import torch
+import numpy as np
 
 def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nepoch, silent=False):
     '''

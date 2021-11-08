@@ -68,7 +68,7 @@ def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test'], cli
 
             for t in t_wakewords:
                 #Remove linspace with overlap. Here, we remove ones with -any- overlap at all.
-                t_linspace = t_linspace[halfclip <= np.abs((t_linspace - t))] #
+                t_linspace = t_linspace[cliplength <= np.abs((t_linspace - t))] #
 
             if ratio is not None:
                 n_class0 = np.round(ratio * counts[ID])

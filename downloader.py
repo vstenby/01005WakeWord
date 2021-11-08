@@ -23,9 +23,8 @@ def main():
     parser.add_argument('--balance', default='1:1', type=str, help='define the balance')
     parser.add_argument('--threads', default=19, type=int, help='how many threads we should download on')
     parser.add_argument('--normalize', default=False, action='store_true', help='whether or not downloaded clips should be normalized.')
-    parser.add_argument('--cliplength', default=2.0, type=float, help='length of the clips')
+    parser.add_argument('--cliplength', default=1.0, type=float, help='length of the clips')
     parser.add_argument('--data-folder', default='/work3/s164419/01005WakeWordData', help='point to data folder')
-    #Add more arguments.
     
     args = parser.parse_args()
     assert ~os.path.exists(os.path.join(args.data_folder, args.export_folder)), 'export folder should not exist.'

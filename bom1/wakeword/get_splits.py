@@ -1,4 +1,7 @@
 import pandas as pd
+from .lecture_durations import lecture_durations
+import torchaudio
+import numpy as np
 
 def get_splits(cliplength = 2):
     '''
@@ -20,7 +23,29 @@ def get_splits(cliplength = 2):
                   how='inner',
                   on=['semester', 'ID'])
 
+    #Remove IDs where duration according to video.dtu.dk and according to torchaudio doesn't match. This seems to be a problem for 12 of the lectures... Not sure why. Perhaps downloading the lectures again will fix the issue.
+    def d(ID):
+        info = torchaudio.info(f'/work3/s164419/01005WakeWordData/lectures/{ID}.wav')
+        return info.num_frames / info.sample_rate
+    
+    durations = lecture_durations()
+    
+    #This is a hardcode fix and will probably needed to be fixed later on.
+    counts['d1'] = counts['ID'].apply(lambda x : durations[x])
+    counts['d2'] = counts['ID'].apply(lambda x : d(x))
+
+    counts = counts.loc[np.abs(counts['d2'] - counts['d1']) < 1] #This will remove 11 of the lectures that caused problems.
+    
     counts['percentage'] = counts['n'].cumsum() / counts['n'].sum()
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     train_ID = (counts['ID'].loc[counts['percentage'] <= 0.7]).tolist()
     val_ID   = (counts['ID'].loc[(counts['percentage'] > 0.7)&(counts['percentage']<= 0.85)]).tolist()
