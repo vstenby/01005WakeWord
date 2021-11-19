@@ -6,6 +6,9 @@ export/
 *.wav
 *.mp3
 
+#We don't want pickle files
+*.pth
+*.p
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

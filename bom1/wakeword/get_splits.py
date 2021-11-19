@@ -3,7 +3,7 @@ from .lecture_durations import lecture_durations
 import torchaudio
 import numpy as np
 
-def get_splits(cliplength = 2):
+def get_splits(cliplength = 1):
     '''
     Returns 
         train, test, val splits

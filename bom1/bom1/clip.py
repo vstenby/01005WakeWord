@@ -66,8 +66,8 @@ def clip(t1, t2, url, outpath, args = parser().parse_args([]),
     
     #This can be written in a more clever way, but for now it'll work.
     url      = [stream_link(fetch_ID(x)) if 'video.dtu.dk' in x else stream_link(x) if not x.endswith('.wav') else x for x in url] #Returns stream_link if url or ID and doesn't end with .wav, otherwise just returns x.
-    t1       = [seconds_to_timestamp(x) for x in t1] #make sure all t1 are timestamps.
-    t2       = [timestamp_to_seconds(x) for x in t2]  #make sure all t2 are seconds.
+    t1       = [seconds_to_timestamp(x) for x in t1]   #make sure all t1 are timestamps.
+    t2       = [timestamp_to_seconds(x) for x in t2]   #make sure all t2 are seconds.
     duration = [seconds_to_timestamp(y - timestamp_to_seconds(x)) for x, y in zip(t1, t2)] #This will fail if t1 and t2 have different lengths.
 
         

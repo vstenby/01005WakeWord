@@ -1,0 +1,15 @@
+Notes:
+
+Wrong label:
+0_0qy5lhqw_t1557.587572595007_c1 (should be class 0)
+0_h9qlm9rr_t1191.962419515489_c1 (should be class 0)
+
+
+
+Wrong label:
+0_z7rjz126_t1195.436813080262_c0  (should be class 1)
+0_481y9w9f_t2526.9192175430567_c0 (should be class 1)
+
+
+This one should be corrected a bit.
+0_cskpvky9_t1364.9983838592004_c1

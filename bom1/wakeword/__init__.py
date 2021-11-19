@@ -9,3 +9,4 @@ from .AudioAugment import AudioAugment
 from .TransformMono import TransformMono
 from .Padder import Padder
 from .train_cnn import train_cnn
+from .train_rnn import train_rnn

@@ -25,6 +25,8 @@ def main():
     parser.add_argument('--normalize', default=False, action='store_true', help='whether or not downloaded clips should be normalized.')
     parser.add_argument('--cliplength', default=1.0, type=float, help='length of the clips')
     parser.add_argument('--data-folder', default='/work3/s164419/01005WakeWordData', help='point to data folder')
+    parser.add_argument('--prepad', default = 0.0, type=float, help='prepadding of clips')
+    parser.add_argument('--postpad', default = 0.0, type=float, help='postpadding of clips')
     
     args = parser.parse_args()
     assert ~os.path.exists(os.path.join(args.data_folder, args.export_folder)), 'export folder should not exist.'
@@ -54,7 +56,6 @@ def main():
     if (prompt != 'y') and (prompt != ''):
         return
     
-    
     for split in splits:
         os.mkdir(os.path.join(args.data_folder, args.export_folder, split))
         split_df = eval(split)
@@ -69,7 +70,7 @@ def main():
         prepath = os.path.join(args.data_folder, args.export_folder, split)
         outpath = (prepath + '/' + wf.generate_path(split_df)).tolist()
         
-        bom1.clip(t1, t2, url, outpath, desc = f'Downloading {split}', ar = args.ar, threads=args.threads, normalize = args.normalize)
+        bom1.clip(t1, t2, url, outpath, desc = f'Downloading {split}', ar = args.ar, threads=args.threads, normalize = args.normalize, prepad = args.prepad, postpad = args.postpad)
         
     return
     
