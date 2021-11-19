@@ -1,9 +1,11 @@
 from tqdm import trange, tqdm
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 import torch
 import numpy as np
+import pickle
+import os
 
-def train_cnn(model, criterion, optimizer, train_loader, device, nepoch, val_loader = None, silent=False):
+def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nepoch, silent=False, path = None):
     '''
     Training loop!
     '''
@@ -11,11 +13,10 @@ def train_cnn(model, criterion, optimizer, train_loader, device, nepoch, val_loa
     model = model.to(device)
     model = model.eval()
     
-    train_losses = []
-    train_accs   = []
-    
-    val_losses   = []
-    val_accs     = []
+    train_statistics = {}
+    val_statistics   = {}
+
+    opt_f1_val = 0
     
     for epoch in trange(nepoch, unit = 'epoch', desc = 'Epoch'):
         #Epochs start @ 1
@@ -27,12 +28,14 @@ def train_cnn(model, criterion, optimizer, train_loader, device, nepoch, val_loa
         #Set it up for training.
         model.train()
         train_loss = 0
-        predictions = []
-        targets = []
+        train_predictions = []
+        train_targets     = []
+        train_paths       = []
+    
         for minibatch_no, data in tqdm(enumerate(train_loader), total=len(train_loader), desc="Training"):
 
             # get the inputs; data is a list of [inputs, labels]
-            _, _, inputs, labels, paths, _ = data
+            inputs, labels, paths = data
 
             #Get that stuff on the GPU
             inputs = inputs.to(device)
@@ -49,58 +52,68 @@ def train_cnn(model, criterion, optimizer, train_loader, device, nepoch, val_loa
             optimizer.step()
 
             #Add the batch loss
-            train_loss += loss.item() / len(paths) #per observation loss.
+            train_loss += loss.item()
 
             #Save predictions and targets
-            predictions += outputs.argmax(axis=1).tolist()
-            targets     += labels.long().tolist()
-
-        train_acc = accuracy_score(targets, predictions)
+            train_predictions += torch.softmax(outputs.cpu().detach(), axis=-1).tolist()
+            train_targets     += labels.long().tolist()
+            train_paths       += list(paths)
     
-        #Append the statistics
-        train_losses.append(train_loss)
-        train_accs.append(train_acc)
+        #Set it up for evaluation on validation set.
+        model.eval()  
+        val_loss = 0
+        val_predictions = []
+        val_targets     = []
+        val_paths       = []
 
-        progress_string += '[%d]: Train: [%.4f | %.3f]' % (epoch, train_loss, train_acc)
+        with torch.no_grad():
+            for minibatch_no, data in tqdm(enumerate(val_loader), total=len(val_loader), desc="Validation"):
 
-        if val_loader is not None:
-            #Set it up for evaluation on validation set.
-            model.eval()  
-            predictions = []
-            targets = []
-            val_loss = 0
-
-            with torch.no_grad():
-                for minibatch_no, data in tqdm(enumerate(val_loader), total=len(val_loader), desc="Validation"):
-
-                    # get the inputs; data is a list of [inputs, labels]
-                    _, _, inputs, labels, paths, _ = data
-                
-                    #Get that stuff on the GPU
-                    inputs = inputs.to(device)
-                    labels = labels.to(device)
-                
-                    # zero the parameter gradients
-                    optimizer.zero_grad()
-
-                    # forward + backward + optimize
-                    outputs = model(inputs.float())
-
-                    #Calculate the loss
-                    loss = criterion(outputs, labels.long())
-                    val_loss += loss.item() / len(paths) #per observation loss.
-
-                    #Save predictions and targets
-                    predictions += outputs.argmax(axis=1).tolist()
-                    targets     += labels.long().tolist()
-    
-                val_acc = accuracy_score(targets, predictions)
+                # get the inputs; data is a list of [inputs, labels]
+                inputs, labels, paths = data
+            
+                #Get that stuff on the GPU
+                inputs = inputs.to(device)
+                labels = labels.to(device)
         
-            val_losses.append(val_loss)
-            val_accs.append(val_acc)
+                # forward pass
+                outputs = model(inputs.float())
 
-            progress_string += ' Validation: [%.4f | %.3f]' % (val_loss, val_accs)
+                #Calculate the loss
+                loss = criterion(outputs, labels.long())
+                val_loss += loss.item()
 
-        if not silent: print(progress_string)
+                #Save predictions and targets
+                val_predictions += torch.softmax(outputs.cpu().detach(), axis=-1).tolist()
+                val_targets     += labels.long().tolist()
+                val_paths       += list(paths)
+
+        #Get the per-batch loss.
+        train_loss = train_loss / len(train_loader)
+        val_loss   = val_loss   / len(val_loader)
+
+        #Calculate the train statistics.
+        tn_train, fp_train, fn_train, tp_train = confusion_matrix(np.array(train_targets), np.array(train_predictions).argmax(axis=1), labels=[0,1]).ravel()
+        f1_train = f1_score(np.array(train_targets), np.array(train_predictions).argmax(axis=1))
+
+        #Calculate the validation statistics.
+        tn_val, fp_val, fn_val, tp_val = confusion_matrix(np.array(val_targets), np.array(val_predictions).argmax(axis=1), labels=[0,1]).ravel()
+        f1_val = f1_score(np.array(val_targets), np.array(val_predictions).argmax(axis=1))
+
+        #Update statistics
+        train_statistics[epoch] = {'avg_batch_loss' : train_loss, 'tn' : tn_train, 'fp' : fp_train, 'fn' : fn_train, 'tp' : tp_train, 'f1' : f1_train}
+        val_statistics[epoch]   = {'avg_batch_loss' : val_loss, 'tn' : tn_val, 'fp' : fp_val, 'fn' : fn_val, 'tp' : tp_val, 'f1' : f1_val}
         
-    return np.arange(1, nepoch+1), train_losses, train_accs, val_losses, val_accs
+        #Dump the statistics.
+        with open(os.path.join(path, 'statistics.p'), 'wb') as f:
+            pickle.dump([train_statistics, val_statistics], f)
+
+        #Save the newest model 
+        torch.save(model.state_dict(), os.path.join(path, 'model.pth'))
+
+        if opt_f1_val <= f1_val:
+            #Save it as the optimal model!
+            torch.save(model.state_dict(), os.path.join(path, 'opt_model.pth'))
+            opt_f1_val = f1_val
+
+    return

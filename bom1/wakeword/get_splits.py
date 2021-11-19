@@ -39,14 +39,6 @@ def get_splits(cliplength = 1):
     counts['percentage'] = counts['n'].cumsum() / counts['n'].sum()
     
     
-    
-    
-    
-    
-    
-    
-    
-    
     train_ID = (counts['ID'].loc[counts['percentage'] <= 0.7]).tolist()
     val_ID   = (counts['ID'].loc[(counts['percentage'] > 0.7)&(counts['percentage']<= 0.85)]).tolist()
     test_ID  = (counts['ID'].loc[counts['percentage'] > 0.85]).tolist()
