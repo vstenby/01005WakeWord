@@ -8,13 +8,13 @@ def add_to_positive_class(path):
 
     links = pd.read_csv(links_csv)
     data = pd.read_csv(data_csv)
+
     split_path = path.split('_')
     lecture_id = '0_' + split_path[2]
     timestamp = split_path[5] + ':' + split_path[7] + ':' + split_path[9]
     seconds = bom1.timestamp_to_seconds(timestamp)
-    print(seconds)
+
     lecture_row = links[links['ID'] == lecture_id]
-    
     row_to_append = {'semester': lecture_row['semester'].item(), 
                      'skema': lecture_row['skema'].item(), 
                      'title': lecture_row['title'].item(), 
