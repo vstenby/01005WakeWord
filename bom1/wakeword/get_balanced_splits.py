@@ -61,7 +61,6 @@ def get_balanced_splits(balance, seed=42, splits = ['train', 'val', 'test'], cli
 
             #Fetch all t.
             t_linspace  = np.arange(halfclip, durations[ID] - halfclip, 0.01) #This is the finest grid possible with our download.
-            
                                 
             #Fetch the t from wakewords.
             t_wakewords = split[['t1', 't2']].loc[split['ID'] == ID].mean(axis=1).tolist()

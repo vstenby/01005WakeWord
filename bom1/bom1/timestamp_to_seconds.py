@@ -4,9 +4,9 @@ def timestamp_to_seconds(ts):
     '''
     
     #If the type is either a float or integer, then just return the timestamp.
-    if (type(ts) is float) or (type(ts) is int): return ts
+    if type(ts) is not str: return ts
     
-    assert type(ts) is str, 'ts should be a string.'
+    assert type(ts) is str, f'ts should be a string, got {ts}'
     assert ts.count(':') <= 2, f"Too many :'s in the timestamp: {ts}"
     assert ts.count('.') <= 1, f"Too many .'s in the timestamp: {ts}"
     

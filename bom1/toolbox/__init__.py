@@ -1,1 +1,1 @@
-from .WakewordDataset import WakewordDataset
+from .WakewordDataset import WakewordDataset, WakewordDatasetRNN

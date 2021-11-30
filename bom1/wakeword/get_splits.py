@@ -3,8 +3,9 @@ from .lecture_durations import lecture_durations
 import torchaudio
 import numpy as np
 import tqdm as tqdm
+import os
 
-def get_splits(cliplength = 1, balance=None, seed=42, splits=['train', 'val', 'test']):
+def get_splits(local_path = '/zhome/55/f/127565/Desktop/01005WakeWord/', cliplength = 1, balance=None, seed=42, splits=['train', 'val', 'test']):
     '''
     Returns 
         train, test, val splits
@@ -12,8 +13,11 @@ def get_splits(cliplength = 1, balance=None, seed=42, splits=['train', 'val', 't
     
     halfclip = cliplength/2
     
-    links = pd.read_csv('./csv/links.csv')
-    data  = pd.read_csv('./csv/data.csv')
+    links_path = local_path + 'csv/links.csv'
+    data_path  = local_path + 'csv/data.csv'
+    
+    links = pd.read_csv(links_path)
+    data  = pd.read_csv(data_path)
     
     data['t1'] = data['t'] - halfclip
     data['t2'] = data['t'] + halfclip

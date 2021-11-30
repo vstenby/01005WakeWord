@@ -15,6 +15,22 @@ def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nep
     
     train_statistics = {}
     val_statistics   = {}
+    
+    #Preallocate statistics.
+    train_statistics['loss'] = []
+    train_statistics['tn']   = []
+    train_statistics['fp']   = []
+    train_statistics['fn']   = []
+    train_statistics['tp']   = []
+    train_statistics['f1']   = []
+
+
+    val_statistics['loss']   = []
+    val_statistics['tn']     = []
+    val_statistics['fp']     = []
+    val_statistics['fn']     = []
+    val_statistics['tp']     = []
+    val_statistics['f1']     = []
 
     opt_f1_val = 0
     
@@ -30,8 +46,7 @@ def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nep
         train_loss = 0
         train_predictions = []
         train_targets     = []
-        train_paths       = []
-    
+        
         for minibatch_no, data in tqdm(enumerate(train_loader), total=len(train_loader), desc="Training"):
 
             # get the inputs; data is a list of [inputs, labels]
@@ -47,7 +62,11 @@ def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nep
             # forward + backward + optimize
             outputs = model(inputs.float())
 
-            loss = criterion(outputs, labels.reshape(-1,).long())
+            #loss = criterion(outputs, labels.reshape(-1,).long())
+            
+            #If the loss is BCEWithLogitsLoss.
+            loss = criterion(outputs, labels.float())
+            
             loss.backward()
             optimizer.step()
 
@@ -55,16 +74,15 @@ def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nep
             train_loss += loss.item()
 
             #Save predictions and targets
-            train_predictions += torch.softmax(outputs.cpu().detach(), axis=-1).tolist()
+            #train_predictions += torch.softmax(outputs.cpu().detach(), axis=-1).tolist()
+            train_predictions += (torch.sigmoid(outputs.cpu().detach()) >= 0.5).tolist()
             train_targets     += labels.long().tolist()
-            train_paths       += list(paths)
     
         #Set it up for evaluation on validation set.
         model.eval()  
         val_loss = 0
         val_predictions = []
         val_targets     = []
-        val_paths       = []
 
         with torch.no_grad():
             for minibatch_no, data in tqdm(enumerate(val_loader), total=len(val_loader), desc="Validation"):
@@ -80,29 +98,45 @@ def train_cnn(model, criterion, optimizer, train_loader, val_loader, device, nep
                 outputs = model(inputs.float())
 
                 #Calculate the loss
-                loss = criterion(outputs, labels.long())
+                #loss = criterion(outputs, labels.long())
+                
+                #If the loss is BCEWithLogitsLoss
+                loss = criterion(outputs, labels.float())
+            
                 val_loss += loss.item()
 
                 #Save predictions and targets
-                val_predictions += torch.softmax(outputs.cpu().detach(), axis=-1).tolist()
+                #val_predictions += torch.softmax(outputs.cpu().detach(), axis=-1).tolist()
+                val_predictions += (torch.sigmoid(outputs.cpu().detach()) >= 0.5).tolist()
                 val_targets     += labels.long().tolist()
-                val_paths       += list(paths)
 
-        #Get the per-batch loss.
-        train_loss = train_loss / len(train_loader)
-        val_loss   = val_loss   / len(val_loader)
+        #Get the average observation loss.
+        train_loss = train_loss / len(train_loader.dataset)
+        val_loss   = val_loss   / len(val_loader.dataset)
 
         #Calculate the train statistics.
-        tn_train, fp_train, fn_train, tp_train = confusion_matrix(np.array(train_targets), np.array(train_predictions).argmax(axis=1), labels=[0,1]).ravel()
-        f1_train = f1_score(np.array(train_targets), np.array(train_predictions).argmax(axis=1))
+        tn_train, fp_train, fn_train, tp_train = confusion_matrix(train_targets, train_predictions, labels=[0,1]).ravel()
+        f1_train = f1_score(train_targets, train_predictions)
 
         #Calculate the validation statistics.
-        tn_val, fp_val, fn_val, tp_val = confusion_matrix(np.array(val_targets), np.array(val_predictions).argmax(axis=1), labels=[0,1]).ravel()
-        f1_val = f1_score(np.array(val_targets), np.array(val_predictions).argmax(axis=1))
+        tn_val, fp_val, fn_val, tp_val = confusion_matrix(val_targets, val_predictions, labels=[0,1]).ravel()
+        f1_val = f1_score(val_targets, val_predictions)
 
-        #Update statistics
-        train_statistics[epoch] = {'avg_batch_loss' : train_loss, 'tn' : tn_train, 'fp' : fp_train, 'fn' : fn_train, 'tp' : tp_train, 'f1' : f1_train}
-        val_statistics[epoch]   = {'avg_batch_loss' : val_loss, 'tn' : tn_val, 'fp' : fp_val, 'fn' : fn_val, 'tp' : tp_val, 'f1' : f1_val}
+        #Update the train statistics.
+        train_statistics['loss'].append(train_loss)
+        train_statistics['tn'].append(tn_train)
+        train_statistics['fp'].append(fp_train)
+        train_statistics['fn'].append(fn_train)
+        train_statistics['tp'].append(tp_train)
+        train_statistics['f1'].append(f1_train)
+        
+        
+        val_statistics['loss'].append(val_loss)
+        val_statistics['tn'].append(tn_val)
+        val_statistics['fp'].append(fp_val)
+        val_statistics['fn'].append(fn_val)
+        val_statistics['tp'].append(tp_val)
+        val_statistics['f1'].append(f1_val)
         
         #Dump the statistics.
         with open(os.path.join(path, 'statistics.p'), 'wb') as f:

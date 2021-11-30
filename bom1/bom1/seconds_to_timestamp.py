@@ -8,7 +8,7 @@ def seconds_to_timestamp(seconds):
     #If we pass a timestamp, then we just do nothing
     if type(seconds) is str: return seconds
 
-    assert (type(seconds) is int) or (type(seconds) is float), 'seconds should either be an int or a float.'
+    #assert (type(seconds) is int) or (type(seconds) is float), f'seconds should either be an int or a float. got {seconds}'
     assert seconds >= 0, 'seconds should be equal to or larger than 0.'
     
     sss = np.round(seconds - np.floor(seconds),2)

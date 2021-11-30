@@ -44,17 +44,13 @@ def ffmpeg_clip(t1, duration, url, outpath, args):
 
 def clip(t1, t2, url, outpath, args = parser().parse_args([]),
         #Here, we set all arguments that can be used by ffmpeg_clip. 
-        prepad    = None, 
-        postpad   = None,
         normalize = None,
         silent    = None,
         threads   = None,
         ar        = None,
         desc      = None,
         ):
-    
-    if prepad is not None:    args.prepad = prepad
-    if postpad is not None:   args.postpad = postpad
+
     if normalize is not None: args.normalize = normalize
     if silent is not None:    args.silent = silent
     if threads is not None:   args.threads = threads
@@ -67,10 +63,9 @@ def clip(t1, t2, url, outpath, args = parser().parse_args([]),
     #This can be written in a more clever way, but for now it'll work.
     url      = [stream_link(fetch_ID(x)) if 'video.dtu.dk' in x else stream_link(x) if not x.endswith('.wav') else x for x in url] #Returns stream_link if url or ID and doesn't end with .wav, otherwise just returns x.
     t1       = [seconds_to_timestamp(x) for x in t1]   #make sure all t1 are timestamps.
-    t2       = [timestamp_to_seconds(x) for x in t2]   #make sure all t2 are seconds.
+    t2       = [timestamp_to_seconds(x) for x in t2]   #make sure all t2 are seconds. 
     duration = [seconds_to_timestamp(y - timestamp_to_seconds(x)) for x, y in zip(t1, t2)] #This will fail if t1 and t2 have different lengths.
 
-        
     pool = multiprocessing.Pool(processes=args.threads)
     
     if not args.silent:

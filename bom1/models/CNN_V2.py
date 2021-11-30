@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class CNN_V1(nn.Module):
+class CNN_V2(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -9,35 +9,35 @@ class CNN_V1(nn.Module):
                               nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1),
                               nn.BatchNorm2d(num_features=16),
                               nn.ReLU(),
-                              nn.Dropout2d(p=0.2),
+                              nn.Dropout2d(p=0.7),
 
                               nn.MaxPool2d(kernel_size=2),
 
                               nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1),
                               nn.BatchNorm2d(num_features=32),
                               nn.ReLU(),
-                              nn.Dropout2d(p=0.2),
+                              nn.Dropout2d(p=0.7),
                             
                               nn.MaxPool2d(kernel_size=2),
 
                               nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
                               nn.BatchNorm2d(num_features=64),
                               nn.ReLU(),
-                              nn.Dropout2d(p=0.2),
+                              nn.Dropout2d(p=0.7),
 
                               nn.MaxPool2d(kernel_size=2),
 
                               nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1),
                               nn.BatchNorm2d(num_features=128),
                               nn.ReLU(),
-                              nn.Dropout2d(p=0.2),
+                              nn.Dropout2d(p=0.7),
 
                               nn.MaxPool2d(kernel_size=2),
 
                               nn.Conv2d(in_channels = 128, out_channels = 256, kernel_size=3, stride=1),
                               nn.BatchNorm2d(num_features=256),
                               nn.ReLU(),
-                              nn.Dropout2d(p=0.2),
+                              nn.Dropout2d(p=0.7),
 
                               nn.MaxPool2d(kernel_size=2),
 
